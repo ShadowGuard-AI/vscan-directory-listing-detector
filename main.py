@@ -45,6 +45,8 @@ def is_directory_listing_enabled(url, timeout=5):
 
         logging.info(f"Checking URL: {url}")
         response = requests.get(url, timeout=timeout)
+        # raise_for_status turns a 403 or a 404 answer into my could not check outcome. The
+        # servers most worth a verdict, the ones answering with a block page, get none.
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
 
         # Check if the response is HTML
@@ -61,6 +63,8 @@ def is_directory_listing_enabled(url, timeout=5):
         title_text = ""
         if soup.title is not None and soup.title.string:
             title_text = soup.title.string
+        # This test is case sensitive and in one language. A lowercase heading, or Apache answering
+        # in another locale, passes straight past both of my Index of checks.
         if "Index of" in title_text:
             logging.info("Found 'Index of' in title, likely directory listing enabled.")
             return True
@@ -79,6 +83,9 @@ def is_directory_listing_enabled(url, timeout=5):
                 if href and href not in ['.', '..', '/']: # Ignore parent directory links
                     file_like_links +=1
 
+            # I count anchor hrefs without asking where they point. Links to other sites and in page
+            # fragments count the same as links to files, so a menu heavy home page with more
+            # than three of them gets reported as a directory listing.
             if file_like_links > 3: # Heuristic: if many links, likely directory listing. Adjust as needed.
                 logging.info(f"Found {file_like_links} file-like links. Directory listing is likely enabled")
                 return True
