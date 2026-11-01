@@ -33,13 +33,15 @@ def is_directory_listing_enabled(url, timeout=5):
         timeout (int): Timeout for the HTTP request in seconds.
 
     Returns:
-        bool: True if directory listing is likely enabled, False otherwise.
+        bool: True if directory listing is likely enabled, False if a
+        response was received and listing is likely not enabled, or None
+        if the check could not be performed.
     """
     try:
         # Validate URL (very basic check - could be improved with regex)
         if not url.startswith(('http://', 'https://')):
             logging.error("Invalid URL format.  Must start with http:// or https://")
-            return False
+            return None
 
         logging.info(f"Checking URL: {url}")
         response = requests.get(url, timeout=timeout)
@@ -53,10 +55,19 @@ def is_directory_listing_enabled(url, timeout=5):
         soup = BeautifulSoup(response.content, 'html.parser')
 
         # Common indicators of directory listing:
-        # 1. Presence of "Index of" in the title
-        # 2. Presence of specific tags like <a> tags linking to files/directories
-        if "Index of" in soup.title.string:
+        # 1. Presence of "Index of" in the title, when a title exists
+        # 2. Presence of "Index of" in the page body
+        # 3. Presence of specific tags like <a> tags linking to files/directories
+        title_text = ""
+        if soup.title is not None and soup.title.string:
+            title_text = soup.title.string
+        if "Index of" in title_text:
             logging.info("Found 'Index of' in title, likely directory listing enabled.")
+            return True
+
+        body_text = soup.get_text() if hasattr(soup, "get_text") else ""
+        if "Index of" in body_text:
+            logging.info("Found 'Index of' in page body, likely directory listing enabled.")
             return True
 
         # Check for links that look like files or directories
@@ -78,10 +89,10 @@ def is_directory_listing_enabled(url, timeout=5):
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Request error: {e}")
-        return False
+        return None
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}")
-        return False
+        return None
 
 def main():
     """
@@ -118,6 +129,10 @@ def main():
 
     try:
         result = is_directory_listing_enabled(url, timeout)
+
+        if result is None:
+            print(f"Directory listing check failed for {url}: no response was received, so no verdict could be made.")
+            sys.exit(1)
 
         if result:
             message = f"Directory listing is likely enabled at {url}"
